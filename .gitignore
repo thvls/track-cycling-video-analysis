@@ -1,0 +1,37 @@
+# Ignore output directories
+output/
+
+# Ignore log files
+*.log
+
+# Ignore temporary files
+*.tmp
+*.bak
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+.dist/
+build/
+*.egg
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore sensitive or personal files
+credentials.json
+
+# Ignore IDEs and editors
+.vscode/
+.idea/
+
+# Ignore compiled binaries
+*.exe
+*.dll
+*.so
