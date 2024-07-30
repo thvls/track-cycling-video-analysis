@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 from tqdm import tqdm # Progress bar
 
-def run_cyclist_detection(vid_file=None, model_id='yolov8s-trackcycling-04.pt', model_mode='predict'):
+def run_cyclist_tracking(vid_file=None, model_id='yolov8s-trackcycling-04.pt', model_mode='predict'):
     """
     Tracks cyclists in a video using YOLOv8 for object detection and BotSort for tracking.
     
@@ -161,4 +161,4 @@ def run_cyclist_detection(vid_file=None, model_id='yolov8s-trackcycling-04.pt', 
     return vid_out, json_out
 
 if __name__ == '__main__':
-    run_cyclist_detection()
+    run_cyclist_tracking()
