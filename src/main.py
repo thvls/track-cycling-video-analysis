@@ -70,7 +70,7 @@ if __name__ == '__main__':
         print(f"Result video file: {path_YOLO_out_vid}")
 
     if run_object_detection:
-        result_vid, result_json = run_cyclist_tracking(vid_file=path_vid_input, model_mode='track')    
+        path_YOLO_out_vid, path_YOLO_out_json = run_cyclist_tracking(vid_file=path_vid_input, model_mode='track')    
     
     ### Changeover detection analysis
     # Load the tracking data
@@ -248,6 +248,12 @@ if __name__ == '__main__':
 
     plt.show()
 
+    # Save figure
+    fig_name = os.path.basename(path_YOLO_out_vid).replace('.mp4', f'_changeover_detection_{now_string}.png')
+    fig_path = os.path.join('output', fig_name)
+    fig.savefig(fig_path)
+    print(f"Figure saved to {fig_path}")
+
     # %% After closing and updating the changeover detection, save the new changeovers
     if not cap:
         cap = cv2.VideoCapture(path_YOLO_out_vid)
@@ -318,7 +324,6 @@ if __name__ == '__main__':
         print(f"Results saved to {json_path_changeovers}")
     else:
         print("Changeover timings not saved.")
-    # INTEGRATE INTERACTIVE WINDOW IN THIS CODE
 
     # %% Extract changeover videos
     from extract_changeover_clips import extract_changeover_clips
