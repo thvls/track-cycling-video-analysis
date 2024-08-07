@@ -34,7 +34,9 @@ def load_tracking_data(json_path):
             try:
                 track_id = detection['track_id'][0]  # track_id is a list with a single element
             except:
-                track_id = np.NaN
+                # track_id = -1  # If track_id is not provided, skip
+                continue
+
             # Calculate center of the bounding box
             center_x = (bbox[0] + bbox[2]) / 2
             center_y = (bbox[1] + bbox[3]) / 2
@@ -255,24 +257,47 @@ def remove_outliers(signal, threshold_abs, threshold_factor, window_size, debug=
             running_mean.append(current_mean)
             running_std.append(current_std)
 
-            threshold = max(threshold_factor * current_std, threshold_abs)
+            threshold = max(threshold_factor * current_std, threshold_abs) # Threshold to remove outliers
 
             if np.abs(signal[i] - filtered_signal[i-1]) > threshold:
+                # Outlier detected
                 mask_removed[i] = True
-                start_idx = i
-                while i < len(signal) and np.abs(signal[i] - filtered_signal[start_idx-1]) > threshold:
-                    mask_removed[i] = True
-                    i += 1
-                implausible_sequences.append((start_idx, i - start_idx))
+                # if i < len(signal) and np.abs(signal[i] - filtered_signal[start_idx-1]) > threshold:
+                #     # As long as the signal is above the threshold, remove the value
+                #     mask_removed[i] = True
+                #     i += 1
+                # implausible_sequences.append((start_idx, i - start_idx)) 
+                # MAYBE ADD MAX LENGTH OF IMPLAUSIBLE SEQUENCE
+                # Predict the missing values based on polyfit using last 10 samples
+                x = np.arange(i-11, i)
+
+                # Fit a polynomial to the last 10 samples before start_idx
+                p = np.polyfit(np.arange(i-11, i-1), filtered_signal[i - 11:i-1], 1)
+                filtered_signal[i] = np.polyval(p, x[-1]) # Predict the next value based on the polynomial fit
+
+                # Debug plot for the polyfit
+                # if debug:
+                    # plt.plot(signal, 'o', label='Original Data')
+                    # plt.plot(x, filtered_signal[i - 11:i], 'o', label='Filtered Data')
+                    # plt.plot(x, np.polyval(p, x), label='Polyfit')
+                    # plt.xlabel('Sample Index')
+                    # plt.ylabel('Signal Value')
+                    # plt.title('Polyfit for Missing Values')
+                    # plt.legend()
+                    # plt.show()
+
+                # if i < len(signal):
+                    
+                #     if i - start_idx > 1:
+                        
+
+                #         # filtered_signal[start_idx:i] = np.interp(
+                #         #     range(start_idx, i), [start_idx-1, i], [filtered_signal[start_idx-1], signal[i]]
+                #         # )
+                #     else:
+                #         filtered_signal[start_idx:i] = filtered_signal[start_idx-1]
                 if i < len(signal):
-                    if i - start_idx > 1:
-                        filtered_signal[start_idx:i] = np.interp(
-                            range(start_idx, i), [start_idx-1, i], [filtered_signal[start_idx-1], signal[i]]
-                        )
-                    else:
-                        filtered_signal[start_idx:i] = filtered_signal[start_idx-1]
-                if i < len(signal):
-                    valid_window = filtered_signal[max(0, i - window_size + 1):i + 1]
+                    valid_window = filtered_signal[max(0, i - window_size + 1):i]
                     running_mean[-1] = np.mean(valid_window)
                     running_std[-1] = np.std(valid_window)
             else:

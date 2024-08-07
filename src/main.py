@@ -7,21 +7,10 @@ import cv2
 import json
 from matplotlib.widgets import Slider
 
-if __name__ == '__main__':
-    # # Determine the directory of the script and set it as the working directory
-    # script_dir = os.path.dirname(os.path.abspath(__file__))
-    # os.chdir(script_dir)
-
-    # # Define paths relative to the script directory
-    # src_dir = os.path.join(script_dir, 'src')
-    # output_dir = os.path.join(script_dir, 'output')
-
-    # Datetime string for saving files
-    now = datetime.now()
-    now_string = now.strftime("%Y%m%d_%H%M%S")
-    
+def select_video_file(sample_path = 'media/sample.mp4'):
+    # Select video file
     path_vid_input = input("Enter the path to the video file: ")
-    path_vid_sample = 'media/sample.mp4'
+    path_vid_sample = sample_path
 
     if not path_vid_input or not os.path.exists(path_vid_input):
         use_sample = input(f"No corresponding video found. Use sample video: {path_vid_sample}? (y/n, default: y)")
@@ -32,8 +21,10 @@ if __name__ == '__main__':
         else: # Break
             print("No video selected. Exiting...")
             exit()
+    
+    return path_vid_input
 
-    # % Object detection
+def select_object_detection_json_file(path_vid_input):
     run_object_detection = True
 
     # If already done, ask to rerun object detection
@@ -53,52 +44,64 @@ if __name__ == '__main__':
         if len(json_files) == 1:
             path_YOLO_out_json = os.path.join('output', json_files[0])
         elif len(json_files) > 1: 
-            # If multiple json files exist, select the latest one
-            print("Multiple JSON files found. Selecting latest.")
-            json_files.sort()
-            path_YOLO_out_json = os.path.join('output', json_files[-1])
+            # If multiple json files exist, prompt user to select which one to use
+            print("Multiple JSON files found. Select which one to use.")
+            # json_files.sort()
+            # path_YOLO_out_json = os.path.join('output', json_files[-1])
+            for i, f in enumerate(json_files):
+                print(f"{i}: {f}")
+            json_file_idx = int(input("Enter the index of the JSON file to use: "))
+            path_YOLO_out_json = os.path.join('output', json_files[json_file_idx])
         
         path_YOLO_out_vid = path_YOLO_out_json.replace('.json', '.mp4')
 
-        if os.path.exists(path_YOLO_out_vid):
+        if os.path.exists(path_YOLO_out_json):
             rerun = input("YOLO objection detection already run on this video. Rerun? (y/n, default: n)")
 
             if rerun.lower() != 'y':
                 run_object_detection = False
 
+        if not os.path.exists(path_YOLO_out_vid):
+            print(f"No corresponding YOLO output video found. Using original for visualization.")
+            path_YOLO_out_vid = path_vid_input
+
         print(f"Result JSON file: {path_YOLO_out_json}")
         print(f"Result video file: {path_YOLO_out_vid}")
 
-    if run_object_detection:
-        path_YOLO_out_vid, path_YOLO_out_json = run_cyclist_tracking(vid_file=path_vid_input, model_mode='track')    
-    
-    ### Changeover detection analysis
-    # Load the tracking data
-    frame_ids, track_ids, x_coords, y_coords = detection_analysis.load_tracking_data(path_YOLO_out_json)
-    
-    # Open video
-    cap = cv2.VideoCapture(path_YOLO_out_vid)
+    return path_YOLO_out_vid, path_YOLO_out_json, run_object_detection
 
-    # Create plotter object
-    # plotter = detection_analysis.VideoPlotterTracks(frame_ids, track_ids, x_coords, y_coords, path_YOLO_out_vid)
-    # plotter.show()
+def restructure_changeovers(changeovers, changeover_times):
+        # Print amount of changeovers
+        print(f"Detected {len(changeovers) // 2} changeovers.")
 
-    # %% Data preparation
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import detection_analysis
+        if len(changeovers) != len(changeover_times):
+            raise ValueError("Length of changeovers and changeover_times must be equal.")
+        
+        out = []
+        
+        for i in range(0, len(changeovers), 2):
+            if i + 1 < len(changeovers):
+                start = changeovers[i]
+                end = changeovers[i + 1]
+                if start[0] == 'start' and end[0] == 'end':
+                    changeover_number = (i // 2) + 1
+                    result = {'changeover_number': changeover_number,
+                            'data': []}
 
+                    changeover = {
+                        'start_frame': start[1],
+                        'end_frame': end[1],
+                        'duration': end[1] - start[1] + 1,
+                        'start_time': changeover_times[i],
+                        'end_time': changeover_times[i + 1]
+                    }
+                    result['data'] = changeover
 
-    y_dist_min, unique_frame_ids = detection_analysis.compute_pairwise_distance(frame_ids, y_coords)
+                out.append(result)
 
-    y_dist_min_clean, mask_filt, removed = detection_analysis.remove_outliers(y_dist_min, 50, 2, 20, debug=False)
-    y_min_dist_clean_filt = detection_analysis.zero_phase_filter(y_dist_min_clean, wn=0.1, order=4)
-    changeovers = detection_analysis.detect_changeovers(y_min_dist_clean_filt)
+        return out
 
-    y_coords_orig = y_coords.copy()
-    frame_ids_orig = frame_ids.copy()
-
-    # %% Detect changeovers based on y-coordinates
+def plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers, now_string):
     # Figure window with following properties:
     # - Three left subplots: x- and y-coordinates, and filtered distance
     # - Right subplot: video frame corresponding to tracer position
@@ -110,7 +113,7 @@ if __name__ == '__main__':
 
     fig = plt.figure(figsize=(12, 6))
     # Set figure title
-    fig.suptitle(f'Changeover Detection Tuning. Video: {path_vid_input}')
+    fig.suptitle(f'Changeover Detection Tuning. Video: {path_YOLO_out_vid}')
 
     gs = fig.add_gridspec(3, 2)
 
@@ -130,8 +133,12 @@ if __name__ == '__main__':
     ax2.set_ylabel('Position [px]')
     ax2.set_title('Y-Coordinates')
 
+    preprocessing.plot_track_numbers(frame_ids, track_ids, x_coords, ax1)
+    preprocessing.plot_track_numbers(frame_ids, track_ids, y_coords, ax2)
+
     # Plot filtered distance
-    ax3.plot(unique_frame_ids, y_min_dist_clean_filt, label='Filtered Distance')
+    ax3.plot(unique_frame_ids, y_dist_min_clean_filt, label='Filtered Distance')
+    ax3.plot(unique_frame_ids, y_dist_min, label='Raw Distance')
     ax3.set_xlabel('Frame no.')
     ax3.set_ylabel('Distance [px]')
     ax3.set_title('Filtered Distance')
@@ -158,12 +165,14 @@ if __name__ == '__main__':
     tracer_line2 = ax2.axvline(frame, color='b', linestyle='--')
     tracer_line3 = ax3.axvline(frame, color='b', linestyle='--')
 
+    changeover_markers = []
+
     # Add changeover markers
     def update_changeover_markers(changeovers, axes):
-        global changeover_markers
+        nonlocal changeover_markers
 
-        # Remove existing changeover markers
-        if changeover_markers:
+        # Remove existing changeover markers if the variable exists
+        if changeover_markers is not None:
             for marker in changeover_markers:
                 marker.remove()
             changeover_markers.clear()
@@ -180,7 +189,6 @@ if __name__ == '__main__':
                     changeover_markers.append(marker)
         return changeover_markers
     
-    changeover_markers = []
     changeover_markers = update_changeover_markers(changeovers, [ax1, ax2, ax3])
 
     # Show legends
@@ -210,14 +218,12 @@ if __name__ == '__main__':
         start_thd_val = start_thd_slider.val
         end_thd_val = end_thd_slider.val
 
-        changeovers = detection_analysis.detect_changeovers(y_min_dist_clean_filt, start_thd=start_thd_val, start_confirm_frames=25, confirm_thd=150, end_thd=end_thd_val, end_confirm_frames=5)
+        changeovers = detection_analysis.detect_changeovers(y_dist_min_clean_filt, start_thd=start_thd_val, start_confirm_frames=25, confirm_thd=150, end_thd=end_thd_val, end_confirm_frames=5)
 
         # Update changeover markers
         changeover_markers = update_changeover_markers(changeovers, [ax1, ax2, ax3])
 
         fig.canvas.draw()
-
-        # CHANGEOVER MARKERS HAVE TO BE REMOVED BEFORE PLOTTING NEW ONE
 
     start_thd_slider.on_changed(update)
     end_thd_slider.on_changed(update)
@@ -248,11 +254,80 @@ if __name__ == '__main__':
 
     plt.show()
 
-    # Save figure
-    fig_name = os.path.basename(path_YOLO_out_vid).replace('.mp4', f'_changeover_detection_{now_string}.png')
-    fig_path = os.path.join('output', fig_name)
-    fig.savefig(fig_path)
-    print(f"Figure saved to {fig_path}")
+    # Save figure if user wants
+    save_fig = input("Save figure? (y/n, default: n) ")
+    # Replace video extension with png. Be robust against caps
+    if save_fig.lower() == 'y':
+        fig_append_string = f'_changeover_detection_{now_string}.png'
+        fig_name = os.path.basename(path_YOLO_out_vid).replace('.mp4', fig_append_string).replace('.MP4', fig_append_string)
+        fig_path = os.path.join('output', fig_name)
+        fig.savefig(fig_path)
+        print(f"Figure saved to {fig_path}")
+
+    return changeovers
+
+if __name__ == '__main__':
+    # # Determine the directory of the script and set it as the working directory
+    # script_dir = os.path.dirname(os.path.abspath(__file__))
+    # os.chdir(script_dir)
+
+    # # Define paths relative to the script directory
+    # src_dir = os.path.join(script_dir, 'src')
+    # output_dir = os.path.join(script_dir, 'output')
+
+    # Datetime string for saving files
+    now = datetime.now()
+    now_string = now.strftime("%Y%m%d_%H%M%S")
+   
+    path_vid_input = select_video_file()
+
+    # Select object detection JSON file
+    path_YOLO_out_vid, path_YOLO_out_json, run_object_detection = select_object_detection_json_file(path_vid_input)
+
+    if run_object_detection:
+        path_YOLO_out_vid, path_YOLO_out_json = run_cyclist_tracking(vid_file=path_vid_input, model_id = 'yolov8n-trackcycling-04.pt', model_mode='track')    
+    
+    ### Changeover detection analysis
+    # Load the tracking data
+    frame_ids, track_ids, x_coords, y_coords = detection_analysis.load_tracking_data(path_YOLO_out_json)
+    
+    # Open video
+    cap = cv2.VideoCapture(path_YOLO_out_vid)
+
+    # Create plotter object
+    plotter = detection_analysis.VideoPlotterTracks(frame_ids, track_ids, x_coords, y_coords, path_YOLO_out_vid)
+    plotter.show()
+
+    # %% Data preparation
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import detection_analysis
+    import preprocessing
+
+    frame_ids_orig, track_ids_orig, x_coords_orig, y_coords_orig = frame_ids, track_ids, x_coords, y_coords
+
+    # Merge tracks
+    _, track_ids_merged, _, _ = preprocessing.merge_tracks(frame_ids, track_ids, x_coords, y_coords)
+
+    frame_ids, track_ids, x_coords, y_coords = preprocessing.remove_outliers_first_sample(frame_ids, track_ids, x_coords, y_coords, debug=True)
+
+    # Fill discontinuities
+    frame_ids, track_ids, x_coords, y_coords = preprocessing.fill_discontinuities(frame_ids, track_ids, x_coords, y_coords)
+
+    # Plot data
+    preprocessing.plot_data(frame_ids, track_ids, x_coords, y_coords)
+
+    y_dist_min, unique_frame_ids = detection_analysis.compute_pairwise_distance(frame_ids, y_coords)
+
+    # y_dist_min_clean, mask_filt, removed = detection_analysis.remove_outliers(y_dist_min, 25, 1.25, 20, debug=True)
+    y_dist_min_clean_filt = detection_analysis.zero_phase_filter(y_dist_min, wn=0.1, order=4)
+    changeovers = detection_analysis.detect_changeovers(y_dist_min_clean_filt)
+
+    y_coords_orig = y_coords.copy()
+    frame_ids_orig = frame_ids.copy()
+
+    # %% Plot changeover detection
+    changeovers = plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers, now_string)
 
     # %% After closing and updating the changeover detection, save the new changeovers
     if not cap:
@@ -277,34 +352,6 @@ if __name__ == '__main__':
         time = frame / fps
         changeover_times.append(time)
 
-    def restructure_changeovers(changeovers, changeover_times):
-        if len(changeovers) != len(changeover_times):
-            raise ValueError("Length of changeovers and changeover_times must be equal.")
-        
-        out = []
-        
-        for i in range(0, len(changeovers), 2):
-            if i + 1 < len(changeovers):
-                start = changeovers[i]
-                end = changeovers[i + 1]
-                if start[0] == 'start' and end[0] == 'end':
-                    changeover_number = (i // 2) + 1
-                    result = {'changeover_number': changeover_number,
-                            'data': []}
-
-                    changeover = {
-                        'start_frame': start[1],
-                        'end_frame': end[1],
-                        'duration': end[1] - start[1] + 1,
-                        'start_time': changeover_times[i],
-                        'end_time': changeover_times[i + 1]
-                    }
-                    result['data'] = changeover
-
-                out.append(result)
-
-        return out
-
     # Append times to changeovers
     changeovers_out = restructure_changeovers(changeovers, changeover_times)
     
@@ -328,17 +375,19 @@ if __name__ == '__main__':
     # %% Extract changeover videos
     from extract_changeover_clips import extract_changeover_clips
 
-    if not os.path.exists(json_path_changeovers):
-        json_path_changeovers = input("Enter the path to the changeover JSON file: ")
-    
-    if json_path_changeovers:
-        # Load changeover data
-        with open(json_path_changeovers, 'r') as f:
-            changeover_data = json.load(f)
+    # Ask user to export changeover clips
+    if input("Extract changeover clips? (y/n, default: n) ").lower() == 'y':
+        if not os.path.exists(json_path_changeovers):
+            json_path_changeovers = input("Enter the path to the changeover JSON file: ")
+        
+        if json_path_changeovers:
+            # Load changeover data
+            with open(json_path_changeovers, 'r') as f:
+                changeover_data = json.load(f)
 
-        # Extract changeover videos
-        clip_output_path = 'output/changeovers'
+            # Extract changeover videos
+            clip_output_path = 'output/changeovers'
 
-        extract_changeover_clips(json_path_changeovers, path_vid_input, clip_output_path, buffer_before=2, buffer_after=1)
-    else:
-        print("No changeover JSON file found. Exiting...")
+            extract_changeover_clips(json_path_changeovers, path_vid_input, clip_output_path, buffer_before=2, buffer_after=1)
+        else:
+            print("No changeover JSON file found. Exiting...")
