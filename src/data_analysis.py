@@ -214,7 +214,7 @@ ax1.grid(True), ax2.grid(True), ax3.grid(True), ax4.grid(True)
 # Plot the video
 ax5.axis('off')
 
-vidplotter = VideoPlotterGeneric(fig, [ax1, ax2, ax3, ax4], ax5, video_path)
+vidplotter = VideoPlotterGeneric(fig, [ax1, ax2, ax3, ax4], ax5, video_path, x_type='time')
 vidplotter.show()
 
 # %% Output Plot
@@ -262,7 +262,7 @@ ax1.set_ylabel('Power (Watts)')
 ax1.legend()
 ax1.grid(True)
 
-vidplotter = VideoPlotterGeneric(fig, [ax1], ax2, video_path)
+vidplotter = VideoPlotterGeneric(fig, [ax1], ax2, video_path, x_type='time')
 
 vidplotter.show()
 

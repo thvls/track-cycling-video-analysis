@@ -162,6 +162,7 @@ class VideoPlotterGeneric:
         axs_data (list): List of axis objects containing the data plots.
         ax_video (matplotlib.axes.Axes): Axis object to contain the video frame.
         video_path (str): Path to the video file.
+        x_type (str): Type of x-axis data. Can be 'frame' or 'time'.
 
     Methods (external):
         show: Show the figure.       
@@ -169,7 +170,7 @@ class VideoPlotterGeneric:
     Updates to-do:
         - Define translation function from data x-axis to video frame index.
     """
-    def __init__(self, fig, axs_data, ax_video, video_path):
+    def __init__(self, fig, axs_data, ax_video, video_path, x_type = 'frame'):
         self.video_path = video_path
         self.cap = cv2.VideoCapture(video_path)
         self.frame_count = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
@@ -181,7 +182,9 @@ class VideoPlotterGeneric:
         self.current_x = 0
         # Get maximum value of the axes
         self.max_x = max([ax.get_xlim()[1] for ax in axs_data])
-        
+
+        self.x_type = x_type
+
         self.setup_video(ax_video)
         self.add_tracers()
         self.connect_events()
@@ -190,10 +193,12 @@ class VideoPlotterGeneric:
         # plt.show()
         # self.cap.release()
 
-    def map_x_to_frame(self, x):
-        """Map the x-coordinate of the data plot to the corresponding video frame index."""
-        frame_idx = int(x * self.fps)
-        return frame_idx
+    def map_x_to_frame_idx(self, x):
+        """Convert x to frame index."""
+        if self.x_type == 'time':
+            return x * self.fps
+        
+        return x
 
     def setup_video(self, ax_video):
         """Add the video to the provided axis."""
@@ -219,7 +224,7 @@ class VideoPlotterGeneric:
 
     def update(self, x):
         self.current_x = x
-        frame_idx = self.map_x_to_frame(x)
+        frame_idx = self.map_x_to_frame_idx(x)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = self.cap.read()
 
@@ -233,7 +238,7 @@ class VideoPlotterGeneric:
 
     def update_frame(self, x):
         self.current_x = x
-        frame_idx = self.map_x_to_frame(x)
+        frame_idx = self.map_x_to_frame_idx(x)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = self.cap.read()
         if ret:
@@ -267,3 +272,4 @@ class VideoPlotterGeneric:
         self.update(0)
         plt.draw()
         plt.show()
+
