@@ -4,6 +4,16 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from matplotlib.widgets import Slider
 
+def plot_track_numbers(frame_ids, track_ids, coords, ax):
+    """Plot the track number on an existing subplot (ax) at the provided coordinates.
+    Frame ID on x-axis."""
+    for _, track_id in enumerate(np.unique(track_ids)):
+        mask = track_ids == track_id
+        track_indices = np.where(mask)[0]
+        ax.text(frame_ids[track_indices[0]], coords[track_indices[0]], f'{track_id}', fontsize=8, color='black')
+
+    return
+
 # %% VideoPlotter Tool
 """Creates a figure showing the track coordinates on a left subplot and the
 corresponding video frame on a right subplot. Interactive (seeking).

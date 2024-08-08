@@ -5,6 +5,7 @@ Run this script to test or debug the preprocessing steps used in the main tool."
 import numpy as np
 import detection_analysis as da
 import matplotlib.pyplot as plt
+from plotting_tools import plot_track_numbers
 
 def plot_data(frame_ids, track_ids, x_coords, y_coords):
     fig = plt.figure(figsize=(12, 6))
@@ -353,16 +354,6 @@ def merge_tracks(frame_ids, track_ids, x_coords, y_coords, debug=False):
 
     return frame_ids, track_ids_merged, x_coords, y_coords
 
-def plot_track_numbers(frame_ids, track_ids, coords, ax):
-    """Plot the track number on an existing subplot (ax) at the provided coordinates.
-    Frame ID on x-axis."""
-    for i, track_id in enumerate(np.unique(track_ids)):
-        mask = track_ids == track_id
-        track_indices = np.where(mask)[0]
-        ax.text(frame_ids[track_indices[0]], coords[track_indices[0]], f'{track_id}', fontsize=8, color='black')
-
-    return
-
 # %% FILL DISCONTINUITIES
 from scipy.interpolate import interp1d
 
@@ -591,9 +582,9 @@ def remove_outliers_first_sample(frame_ids, track_ids, x_coords, y_coords, thres
     return frame_ids[~mask_invalid], track_ids[~mask_invalid], x_coords[~mask_invalid], y_coords[~mask_invalid]
 
 if __name__ == '__main__':
-    # frame_ids, track_ids, x_coords, y_coords, _, _ = da.load_tracking_data(r'output\VID-PI-EL-BEL-240412-NC-Milton-TP-R1_20240730_100328_yolov8s-trackcycling-04.json')
-    # frame_ids, track_ids, x_coords, y_coords, _, _ = da.load_tracking_data(r'output\C1319-20240701_112129_yolov8m-trackcycling-03-output.json')
-    frame_ids, track_ids, x_coords, y_coords, _, _ = da.load_tracking_data(r'output\sample_yolov8s-output.json')
+    # frame_ids, track_ids, x_coords, y_coords, _, heights = da.load_tracking_data(r'output\VID-PI-EL-BEL-240412-NC-Milton-TP-R1_20240730_100328_yolov8s-trackcycling-04.json')
+    # frame_ids, track_ids, x_coords, y_coords, _, heights = da.load_tracking_data(r'output\C1319-20240701_112129_yolov8m-trackcycling-03-output.json')
+    frame_ids, track_ids, x_coords, y_coords, _, heights = da.load_tracking_data(r'media\sample_yolov8s-output.json')
     _, track_ids_merged, _, _ = merge_tracks(frame_ids, track_ids, x_coords, y_coords, debug=True)
     frame_ids_fill_x, track_ids_fill, x_coords_fill, y_coords_fill = fill_discontinuities(frame_ids, track_ids_merged, x_coords, y_coords, debug=True)
     frame_ids_clean, track_ids_clean, x_coords_clean, y_coords_clean = remove_outliers_first_sample(frame_ids_fill_x, track_ids_fill, x_coords_fill, y_coords_fill, debug=True)
