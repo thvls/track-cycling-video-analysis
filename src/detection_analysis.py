@@ -25,6 +25,8 @@ def load_tracking_data(json_path):
     y_coords = []
     frame_ids = []
     track_ids = []
+    widths = []
+    heights = []
 
     # Loop through the data to extract bounding box centers
     for frame in data:
@@ -40,11 +42,15 @@ def load_tracking_data(json_path):
             # Calculate center of the bounding box
             center_x = (bbox[0] + bbox[2]) / 2
             center_y = (bbox[1] + bbox[3]) / 2
+            width = bbox[2] - bbox[0]
+            height = bbox[3] - bbox[1]
             
             x_coords.append(center_x)
             y_coords.append(center_y)
             frame_ids.append(frame_id)
             track_ids.append(track_id)
+            widths.append(width)
+            heights.append(height)
 
     # Open video
     cap = cv2.VideoCapture(video_path)
@@ -60,7 +66,7 @@ def load_tracking_data(json_path):
     cap.release()
 
     # return frame_ids, track_ids, x_coords, y_coords
-    return np.array(frame_ids), np.array(track_ids), np.array(x_coords), np.array(y_coords)
+    return np.array(frame_ids), np.array(track_ids), np.array(x_coords), np.array(y_coords), np.array(widths), np.array(heights)
 
 
 # %% Signal Processing
@@ -293,3 +299,8 @@ def restructure_changeovers(changeovers, changeover_times):
             out.append(result)
 
     return out
+
+def normalize_rider_movement(y_distance):
+    """Normalizes the rider movement (height, y-coordinate) w.r.t. bounding box height.
+    Physical rider height is assumed to be constant and equal for all riders, and is as such used as a reference.
+    """

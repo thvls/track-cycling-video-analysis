@@ -102,13 +102,14 @@ def restructure_changeovers(changeovers, changeover_times):
 
         return out
 
-def plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers, now_string):
+def plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers):
     # Figure window with following properties:
     # - Three left subplots: x- and y-coordinates, and filtered distance
     # - Right subplot: video frame corresponding to tracer position
     # - Vertical marker lines for detected changeovers
     # - Sliders to modify the changeover detection thresholds
-    
+    now_string = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     # Load video to show frames
     cap = cv2.VideoCapture(path_YOLO_out_vid)
 
@@ -290,7 +291,7 @@ if __name__ == '__main__':
     
     ### Changeover detection analysis
     # Load the tracking data
-    frame_ids, track_ids, x_coords, y_coords = detection_analysis.load_tracking_data(path_YOLO_out_json)
+    frame_ids, track_ids, x_coords, y_coords, _, _ = detection_analysis.load_tracking_data(path_YOLO_out_json)
     
     # Open video
     cap = cv2.VideoCapture(path_YOLO_out_vid)
@@ -328,7 +329,7 @@ if __name__ == '__main__':
     frame_ids_orig = frame_ids.copy()
 
     # %% Plot changeover detection
-    changeovers = plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers, now_string)
+    changeovers = plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers)
 
     # %% After closing and updating the changeover detection, save the new changeovers
     if not cap:
