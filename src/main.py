@@ -1,6 +1,7 @@
 # %%
 from cyclist_tracking import run_cyclist_tracking
 import detection_analysis
+from plotting_tools import VideoPlotterTracks
 from datetime import datetime
 import os
 import cv2
@@ -295,7 +296,7 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(path_YOLO_out_vid)
 
     # Create plotter object
-    plotter = detection_analysis.VideoPlotterTracks(frame_ids, track_ids, x_coords, y_coords, path_YOLO_out_vid)
+    plotter = VideoPlotterTracks(frame_ids, track_ids, x_coords, y_coords, path_YOLO_out_vid)
     plotter.show()
 
     # %% Data preparation

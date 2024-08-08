@@ -174,19 +174,19 @@ s_athlete.on_changed(update)
 
 plt.show()
 
-
 # %% Power filter debug plot
 # Plot raw and filtered power data for each rider on one subplot
 
 fig = plt.figure(figsize=(12, 6))
 fig.suptitle('Power Filter Debug Plot')
 
-gs = fig.add_gridspec(2, 2)
+gs = fig.add_gridspec(2, 3)
 
 ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
-ax3 = fig.add_subplot(gs[0, 1], sharey=ax1)
+ax3 = fig.add_subplot(gs[0, 1], sharex=ax1)
 ax4 = fig.add_subplot(gs[1, 1], sharex=ax1)
+ax5 = fig.add_subplot(gs[:, 2]) # Subplot to show the video
 
 ax1.plot(rider_dfs_t[athlete_ids[0]]['Time'], rider_dfs_t[athlete_ids[0]]['Power'], label='Raw Power', linestyle='-', linewidth=1, color='blue')
 ax1.plot(rider_dfs_t[athlete_ids[0]]['Time'], rider_dfs_t[athlete_ids[0]]['Power_Filt'], label='Filtered Power', linestyle='-', linewidth=1, color='red')
@@ -204,13 +204,18 @@ ax4.plot(rider_dfs_t[athlete_ids[3]]['Time'], rider_dfs_t[athlete_ids[3]]['Power
 ax4.plot(rider_dfs_t[athlete_ids[3]]['Time'], rider_dfs_t[athlete_ids[3]]['Power_Filt'], label='Filtered Power', linestyle='-', linewidth=1, color='red')
 ax4.plot(rider_dfs_t[athlete_ids[3]]['Time'], rider_dfs_t[athlete_ids[3]]['Power_MA_10s'], label='10s MA', linestyle='--', linewidth=1, color='green')
 
-
 ax1.set_title('Athlete 1'), ax2.set_title('Athlete 2'), ax3.set_title('Athlete 3'), ax4.set_title('Athlete 4')
 ax1.set_ylabel('Power (Watts)'), ax2.set_ylabel('Power (Watts)'), ax3.set_ylabel('Power (Watts)'), ax4.set_ylabel('Power (Watts)')
 ax1.grid(True), ax2.grid(True), ax3.grid(True), ax4.grid(True)
 
-plt.legend()
-plt.show()
+# Plot the video
+ax5.axis('off')
+
+from detection_analysis import VideoPlotterGeneric
+
+vidplotter = VideoPlotterGeneric(fig, [ax1, ax2, ax3, ax4], ax5, 'media\C1319.MP4')
+
+vidplotter.show()
 
 # %% Output Plot
 plt.figure(figsize=(12, 6))
@@ -218,9 +223,9 @@ colors = plt.get_cmap('tab10', len(rider_dfs_t))  # Use a colormap to get distin
 
 for idx, (athlete_id, df) in enumerate(rider_dfs_t.items()):
     color = colors(idx)
-    plt.plot(df['Time'], df['Power'], label=f'Athlete {athlete_id}', linestyle='-', linewidth=1, color=color)
-    plt.plot(df['Time'], df['Power_MA_10s'], label=f'Athlete {athlete_id} (10s MA)', linestyle='--', linewidth=1, color=color)
-    plt.plot(df['Time'], df['Power_Filt'], label=f'Athlete {athlete_id} (BW Filt)', linestyle='-.', linewidth=2, color=color)
+    plt.plot(df['Time'], df['Power'], label=f'Athlete {athlete_id}', linestyle='-', linewidth=0.5, color=color)
+    plt.plot(df['Time'], df['Power_MA_10s'], label=f'Athlete {athlete_id} (10s MA)', linestyle='--', linewidth=0.2, color=color)
+    plt.plot(df['Time'], df['Power_Filt'], label=f'Athlete {athlete_id} (BW Filt)', linestyle='-', linewidth=2, color=color)
     for co in changeover_times:
         plt.axvline(x=co['start_time'], color='green', linestyle='--')
         plt.axvline(x=co['start_time']+CO_ANALYSIS_WINDOW_POST_START, color='red', linestyle='--')
@@ -230,4 +235,34 @@ plt.ylabel('Power (Watts)')
 plt.title('Comparison of Power Outputs Between Riders')
 plt.legend()
 plt.grid(True)
-plt.show()
+
+# %% Output Plot with Video
+
+fig = plt.figure(figsize=(12, 6))
+fig.suptitle('Comparison of Power Outputs Between Riders')
+
+colors = plt.get_cmap('tab10', len(rider_dfs_t))  # Use a colormap to get distinct colors
+
+gs = fig.add_gridspec(1, 3)
+
+ax1 = fig.add_subplot(gs[0, :-1])
+ax2 = fig.add_subplot(gs[0, 2])
+
+for idx, (athlete_id, df) in enumerate(rider_dfs_t.items()):
+    color = colors(idx)
+    ax1.plot(df['Time'], df['Power'], label=f'Athlete {athlete_id}', linestyle='-', linewidth=0.5, color=color)
+    ax1.plot(df['Time'], df['Power_MA_10s'], label=f'Athlete {athlete_id} (10s MA)', linestyle='--', linewidth=0.2, color=color)
+    ax1.plot(df['Time'], df['Power_Filt'], label=f'Athlete {athlete_id} (BW Filt)', linestyle='-', linewidth=2, color=color)
+    for co in changeover_times:
+        ax1.axvline(x=co['start_time'], color='green', linestyle='--')
+        ax1.axvline(x=co['start_time']+CO_ANALYSIS_WINDOW_POST_START, color='red', linestyle='--')
+
+ax1.set_xlabel('Time')
+ax1.set_ylabel('Power (Watts)')
+ax1.legend()
+ax1.grid(True)
+
+vidplotter = VideoPlotterGeneric(fig, [ax1], ax2, 'media\C1319.MP4')
+
+vidplotter.show()
+
