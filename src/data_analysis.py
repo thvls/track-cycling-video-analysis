@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from detection_analysis import zero_phase_filter
+from plotting_tools import VideoPlotterGeneric
 
 def moving_average(data, window=30):
     """Input a list of data and return the moving average of the data"""
@@ -14,13 +15,15 @@ def normalized_power(power_data, window=30):
     return np_power
 
 # Load the JSON data
-file_path_power_data = 'data/pursuit_times.json'
+file_path_power_data = r'data\pursuit_times.json'
 with open(file_path_power_data, 'r') as file:
     data = json.load(file)
 
-file_path_changeover_times = 'output\changeovers\C1319-20240701_112129_yolov8m-trackcycling-03-output_changeovers_20240730_131940.json'
+file_path_changeover_times = r'output\changeovers\C1319-20240701_112129_yolov8m-trackcycling-03-output_changeovers_20240730_131940.json'
 with open(file_path_changeover_times, 'r') as file:
     changeover_data = json.load(file)
+
+video_path = r'media\C1319.MP4'
 
 # Extract the changeover times for each rider
 changeover_times = []
@@ -211,10 +214,7 @@ ax1.grid(True), ax2.grid(True), ax3.grid(True), ax4.grid(True)
 # Plot the video
 ax5.axis('off')
 
-from detection_analysis import VideoPlotterGeneric
-
-vidplotter = VideoPlotterGeneric(fig, [ax1, ax2, ax3, ax4], ax5, 'media\C1319.MP4')
-
+vidplotter = VideoPlotterGeneric(fig, [ax1, ax2, ax3, ax4], ax5, video_path)
 vidplotter.show()
 
 # %% Output Plot
@@ -262,7 +262,7 @@ ax1.set_ylabel('Power (Watts)')
 ax1.legend()
 ax1.grid(True)
 
-vidplotter = VideoPlotterGeneric(fig, [ax1], ax2, 'media\C1319.MP4')
+vidplotter = VideoPlotterGeneric(fig, [ax1], ax2, video_path)
 
 vidplotter.show()
 
