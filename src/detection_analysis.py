@@ -3,15 +3,28 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from matplotlib.widgets import Slider
 from scipy.spatial.distance import cdist
 from tqdm import tqdm
 from scipy.signal import butter, filtfilt
 
-""" This script contains functions to load and analyze tracking data from a JSON file. 
-It also contains a class to plot the tracking data on top of the video frames. """
+""" This script contains functions to load and analyze cyclist tracking data (YOLO output) from a JSON file.
+
+To-do:
+- Set minimum changeover duration to avoid early end detection caused by tracking problems. Requires link to video (convert frames to time via FPS).
+
+
+ """
 
 def load_tracking_data(json_path):
+    """
+    Returns:
+        array-like: frame_ids
+        array-like: track_ids
+        array-like: x_coords
+        array-like: y_coords
+        array-like: widths
+        array-like: heights
+    """
     try:
         with open(json_path, 'r') as file:
             data = json.load(file)
@@ -68,121 +81,37 @@ def load_tracking_data(json_path):
     # return frame_ids, track_ids, x_coords, y_coords
     return np.array(frame_ids), np.array(track_ids), np.array(x_coords), np.array(y_coords), np.array(widths), np.array(heights)
 
-
-# %% Signal Processing
-def remove_outliers(signal, threshold_abs, threshold_factor, window_size, debug=False):
-    """
-    Apply a standard deviation-based filter to remove outliers from the signal.
+def zero_phase_filter(data, wn=0.1, order=2, debug=False):
+    """ Apply a zero-phase Butterworth filter to the input data. Forward-backward filtering is used to avoid phase shift, hence only works
+    for offline processing and not in real-time applications.
     
-    Parameters:
-    signal (array-like): Input signal to be filtered.
-    threshold_factor (float): Factor to determine the outlier threshold based on running standard deviation.
-    window_size (int): Window size for computing running standard deviation.
-    debug (bool): Flag to indicate if debug plot should be generated.
-    
-    Returns:
-    array-like: Filtered signal with implausible values corrected.
-    array-like: Mask indicating the removed values.
-    list: List of tuples indicating start and length of outlier sequences.
-    """
-    signal = np.asarray(signal)
-    filtered_signal = signal.copy()
-    implausible_sequences = []
-    mask_removed = np.zeros_like(signal, dtype=bool)
+    - Debug plot shows the original and filtered data, as well as interpolated values in case of NaN."""
+    # Handle NaN values
+    data = np.asarray(data).flatten()
+    # Interpolate NaN values
+    nans, x = np.isnan(data), lambda z: z.nonzero()[0]
+    print(f"nans: {nans}, x: {x}")
+    data[nans] = np.interp(x(nans), x(~nans), data[~nans])
+    # Warning if NaN values are present
+    if np.sum(np.isnan(data)) > 0:
+        print("Warning: NaN values are present in the data. Interpolated between adjacent values.")
 
-    # Initialize running statistics
-    running_mean = []
-    running_std = []
-
-    prev_valid_idx = 0
-
-    pbar = tqdm(total=len(signal), desc='Processing signal')
-
-    for i in range(len(signal)):
-        if i == 0:
-            running_mean.append(signal[i])
-            running_std.append(0)
-        else:
-            # Use a window of last validated samples
-            valid_window = filtered_signal[max(0, prev_valid_idx - window_size):prev_valid_idx]
-
-            current_mean = np.mean(valid_window)
-            current_std = np.std(valid_window)
-
-            running_mean.append(current_mean)
-            running_std.append(current_std)
-
-            threshold = max(threshold_factor * current_std, threshold_abs) # Threshold to remove outliers
-
-            if np.abs(signal[i] - filtered_signal[i-1]) > threshold:
-                # Outlier detected
-                mask_removed[i] = True
-                # if i < len(signal) and np.abs(signal[i] - filtered_signal[start_idx-1]) > threshold:
-                #     # As long as the signal is above the threshold, remove the value
-                #     mask_removed[i] = True
-                #     i += 1
-                # implausible_sequences.append((start_idx, i - start_idx)) 
-                # MAYBE ADD MAX LENGTH OF IMPLAUSIBLE SEQUENCE
-                # Predict the missing values based on polyfit using last 10 samples
-                x = np.arange(i-11, i)
-
-                # Fit a polynomial to the last 10 samples before start_idx
-                p = np.polyfit(np.arange(i-11, i-1), filtered_signal[i - 11:i-1], 1)
-                filtered_signal[i] = np.polyval(p, x[-1]) # Predict the next value based on the polynomial fit
-
-                # Debug plot for the polyfit
-                # if debug:
-                    # plt.plot(signal, 'o', label='Original Data')
-                    # plt.plot(x, filtered_signal[i - 11:i], 'o', label='Filtered Data')
-                    # plt.plot(x, np.polyval(p, x), label='Polyfit')
-                    # plt.xlabel('Sample Index')
-                    # plt.ylabel('Signal Value')
-                    # plt.title('Polyfit for Missing Values')
-                    # plt.legend()
-                    # plt.show()
-
-                # if i < len(signal):
-                    
-                #     if i - start_idx > 1:
-                        
-
-                #         # filtered_signal[start_idx:i] = np.interp(
-                #         #     range(start_idx, i), [start_idx-1, i], [filtered_signal[start_idx-1], signal[i]]
-                #         # )
-                #     else:
-                #         filtered_signal[start_idx:i] = filtered_signal[start_idx-1]
-                if i < len(signal):
-                    valid_window = filtered_signal[max(0, i - window_size + 1):i]
-                    running_mean[-1] = np.mean(valid_window)
-                    running_std[-1] = np.std(valid_window)
-            else:
-                prev_valid_idx = i
-
-        pbar.update(1)
+    # Apply zero-phase Butterworth filter
+    b, a = butter(order, wn, btype='low')
+    y = filtfilt(b, a, data)
 
     if debug:
-        # Plot the signal and the removed values
         plt.figure(figsize=(14, 8))
-        plt.plot(signal, label='Original signal', color='blue')
-        plt.plot(filtered_signal, label='Filtered signal', color='green')
-        plt.plot(np.arange(len(signal))[mask_removed], signal[mask_removed], 'rx', label='Removed values')
-
-        # Plot the threshold region
-        running_mean = np.array(running_mean)
-        running_std = np.array(running_std)
-        # For each sample, take either std or abs thhreshold, whichever is larger
-        lower_bound = filtered_signal - np.maximum(threshold_factor * running_std, threshold_abs)
-        upper_bound = filtered_signal + np.maximum(threshold_factor * running_std, threshold_abs)
-
-        plt.fill_between(np.arange(len(signal)), lower_bound, upper_bound, color='grey', alpha=0.5, label='Threshold Region')
-
-        plt.legend()
+        plt.plot(data, label='Original Data', color='blue')
+        plt.plot(y, label='Filtered Data', color='green')
+        plt.plot(np.arange(len(data))[nans], data[nans], 'rx', label='Interpolated Values')
         plt.xlabel('Sample Index')
         plt.ylabel('Signal Value')
-        plt.title('Outlier Detection and Correction with Running Standard Deviation')
+        plt.title('Zero-phase Butterworth Filter')
+        plt.legend()
         plt.show()
-    
-    return filtered_signal, mask_removed, implausible_sequences
+
+    return y
 
 def compute_pairwise_distance(frame_ids, y_coords):
     dist_per_frame = []
@@ -219,15 +148,14 @@ def compute_pairwise_distance(frame_ids, y_coords):
 
     return min_dist, unique_frame_ids
 
-def zero_phase_filter(data, wn=0.1, order=5):
-    b, a = butter(order, wn, btype='low')
-    y = filtfilt(b, a, data)
-    return y
 
-def detect_changeovers(distance, start_thd=20, start_confirm_frames=25, confirm_thd=150, end_thd=20, end_confirm_frames=5):
+def detect_changeovers(distance, start_thd=20, start_confirm_frames=25, confirm_thd=150, end_thd=20, end_confirm_frames=5, video_fps=50, duration_min=2,
+                       duration_fixed=None):
     """
     Detect changeovers in the distance signal. Distance signal must be filtered such that the changeover pattern is not 
-    influence by YOLO misdetections or tracking errors.
+    influenced by YOLO misdetections or tracking errors.
+
+    TODO: Add option to set minimum or fixed duration of changeover to avoid early end detection caused by tracking problems.
 
     Parameters:
     distance (array-like): Distance signal to detect changeovers.
@@ -236,6 +164,9 @@ def detect_changeovers(distance, start_thd=20, start_confirm_frames=25, confirm_
     confirm_thd (float): Threshold for confirming start of changeover.
     end_thd (float): Threshold for detecting end of changeover.
     end_confirm_frames (int): Number of frames to confirm end of changeover.
+    video_fps (int): Frames per second of the video.
+    duration_min (int) [s]: Minimum duration of a changeover [s].
+    duration_fixed (int) [s]: Fixed duration of a changeover [s]. Overrides duration_min. If None, duration is computed based on descending distance.
 
     Returns:
     list: List of tuples indicating start and end of changeover sequences.
@@ -246,7 +177,6 @@ def detect_changeovers(distance, start_thd=20, start_confirm_frames=25, confirm_
     in_changeover = False
     start_counter = 0
     end_counter = 0
-    
 
     for i in range(len(distance)):
         if not in_changeover:
@@ -272,6 +202,8 @@ def detect_changeovers(distance, start_thd=20, start_confirm_frames=25, confirm_
 
 # Append times to changeovers
 def restructure_changeovers(changeovers, changeover_times):
+    """Restructure changeover data to include start and end times."""
+
     if len(changeovers) != len(changeover_times):
         raise ValueError("Length of changeovers and changeover_times must be equal.")
     
@@ -300,7 +232,75 @@ def restructure_changeovers(changeovers, changeover_times):
 
     return out
 
-def normalize_rider_movement(y_distance):
+def normalize_rider_movement(y_dist, frame_ids_unique, h_bboxes, frame_ids, h_rider=1, debug=False):
     """Normalizes the rider movement (height, y-coordinate) w.r.t. bounding box height.
     Physical rider height is assumed to be constant and equal for all riders, and is as such used as a reference.
+
+    Parameters:
+        y_dist (array-like): Distance signal to detect changeovers. Indices in frame_ids_unique.
+        frame_ids_unique (array-like): Unique frame IDs.
+        h_bboxes (array-like): Heights of bounding boxes for each data point. Indices correspond to frame_ids.
+        frame_ids (array-like): Frame IDs for each data point.
+
+    Next steps:
+        - Input changeover times
+        - Get maximum height per changeover
+        - Normalize y_dist per changeover 
     """
+    # Filter bbox height
+    # h_bboxes = zero_phase_filter(h_bboxes, wn=0.1, order=2, debug=True)
+    
+    # Get max bbox height per frame
+    h_bboxes_max_per_frame = []
+    # print(frame_ids)
+    for frame_id in frame_ids_unique:
+        idx = np.where(frame_ids == frame_id)[0]
+        if len(idx) > 0:
+            h_bboxes_max_per_frame.append(np.max(h_bboxes[idx]))
+        else:
+            h_bboxes_max_per_frame.append(np.nan)
+
+    h_bboxes_max_per_frame_filt = zero_phase_filter(h_bboxes_max_per_frame, wn=0.1, order=2, debug=True)
+
+    # Normalize y_dist. Avoid division by zero
+    # y_dist_norm = np.zeros_like(y_dist)
+    # for i, frame_id in enumerate(frame_ids_unique):
+        # y_dist_norm[i] = y_dist[i] / h_bboxes_max_per_frame_filt[i]
+    y_dist_norm = y_dist / h_bboxes_max_per_frame_filt
+
+    print(f"y_dist_norm: {y_dist_norm}")
+
+    # Plot y_dist, height and normalized y_dist
+    if debug:
+        fig = plt.figure(figsize=(12, 6))
+        fig.suptitle('Bbox Y-distance and Bbox Height')
+
+        gs = fig.add_gridspec(2,2)
+
+        ax1 = fig.add_subplot(gs[0,0])
+        ax2 = fig.add_subplot(gs[1,0], sharex=ax1)
+        ax3 = fig.add_subplot(gs[:,1])
+
+        ax1.plot(frame_ids_unique, y_dist, label='Distance', color='blue')
+        ax1.set_ylim([0, 400])
+        
+        # Create a secondary y-axis for the normalized distance
+        ax12 = ax1.twinx()
+        ax12.plot(frame_ids_unique, y_dist_norm, label='Normalized Distance', color='red')
+        ax12.set_ylim([0, 4])
+        ax12.set_ylabel('Normalized Distance')
+
+        ax2.set_ylabel('Distance (px)')
+        ax2.plot(frame_ids, h_bboxes, label='Bounding Box Height', color='green')
+        ax2.plot(frame_ids_unique, h_bboxes_max_per_frame_filt, label='Max Bounding Box Height', color='orange')
+        ax2.set_ylabel('Bounding Box Height (px)')
+        ax2.set_xlabel('Frame Index')
+
+        plt.legend()
+        
+        from plotting_tools import VideoPlotterGeneric
+
+        # VideoPlotterGeneric(fig, [ax1, ax12, ax2], ax3, video_path=r'output\C1319-20240701_112129_yolov8m-trackcycling-03-output.mp4', x_type='frame').show()
+        # Video path is hardcoded for now
+        VideoPlotterGeneric(fig, [ax1, ax12, ax2], ax3, video_path=r'media\VID-PI-EL-BEL-240412-NC-Milton-TP-R1.MP4', x_type='frame').show()
+

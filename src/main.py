@@ -1,12 +1,31 @@
+"""
+Workflow:
+- Load video file
+- Run object detection
+- Load resulting tracking data
+- Preprocess tracking data to improve changeover detection consistency: merge (clearly distinguishable) track ID, remove outliers, fill discontinuities
+- Detect changeovers
+- Plot and save changeover detection results
+- Extract changeover clips
+
+TO-DO:
+- Update local debug (extra print and visual output) flags to global DEBUG_ON flag
+"""
+
 # %%
 from cyclist_tracking import run_cyclist_tracking
 import detection_analysis
-from plotting_tools import VideoPlotterTracks
+import preprocessing
+import plotting_tools
 from datetime import datetime
 import os
 import cv2
 import json
 from matplotlib.widgets import Slider
+from extract_changeover_clips import extract_changeover_clips
+import numpy as np
+import matplotlib.pyplot as plt
+import plotting_tools
 
 def select_video_file(sample_path = 'media/sample.mp4'):
     # Select video file
@@ -102,12 +121,15 @@ def restructure_changeovers(changeovers, changeover_times):
 
         return out
 
-def plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers):
-    # Figure window with following properties:
-    # - Three left subplots: x- and y-coordinates, and filtered distance
-    # - Right subplot: video frame corresponding to tracer position
-    # - Vertical marker lines for detected changeovers
-    # - Sliders to modify the changeover detection thresholds
+def plot_tune_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers):
+    """
+    THIS MUST BE UPDATED TO USE VIDEOPLOTTER CLASS.
+
+    - Plots X, Y coordinates and distance between riders
+    - Shows video frame corresponding to frame selected by tracer in the plots
+    - Shows detected changeovers
+    - Sliders to tune changeover detection thresholds
+    """
     now_string = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Load video to show frames
@@ -135,12 +157,13 @@ def plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords,
     ax2.set_ylabel('Position [px]')
     ax2.set_title('Y-Coordinates')
 
-    preprocessing.plot_track_numbers(frame_ids, track_ids, x_coords, ax1)
-    preprocessing.plot_track_numbers(frame_ids, track_ids, y_coords, ax2)
+    plotting_tools.plot_track_numbers(frame_ids, track_ids, x_coords, ax1)
+    plotting_tools.plot_track_numbers(frame_ids, track_ids, y_coords, ax2)
 
-    # Plot filtered distance
-    ax3.plot(unique_frame_ids, y_dist_min_clean_filt, label='Filtered Distance')
-    ax3.plot(unique_frame_ids, y_dist_min, label='Raw Distance')
+    # Plot filtered distance 
+    # HOW DOES THIS WORK?? The variable y_dist_min_clean_filt is not defined in this scope
+    ax3.plot(frame_ids_unique, y_dist_min_clean_filt, label='Filtered Distance')
+    ax3.plot(frame_ids_unique, y_dist_min, label='Raw Distance')
     ax3.set_xlabel('Frame no.')
     ax3.set_ylabel('Distance [px]')
     ax3.set_title('Filtered Distance')
@@ -269,13 +292,7 @@ def plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords,
     return changeovers
 
 if __name__ == '__main__':
-    # # Determine the directory of the script and set it as the working directory
-    # script_dir = os.path.dirname(os.path.abspath(__file__))
-    # os.chdir(script_dir)
-
-    # # Define paths relative to the script directory
-    # src_dir = os.path.join(script_dir, 'src')
-    # output_dir = os.path.join(script_dir, 'output')
+    # %% LOAD VIDEO AND DATA
 
     # Datetime string for saving files
     now = datetime.now()
@@ -289,49 +306,67 @@ if __name__ == '__main__':
     if run_object_detection:
         path_YOLO_out_vid, path_YOLO_out_json = run_cyclist_tracking(vid_file=path_vid_input, model_id = 'yolov8n-trackcycling-04.pt', model_mode='track')    
     
-    ### Changeover detection analysis
-    # Load the tracking data
-    frame_ids, track_ids, x_coords, y_coords, _, _ = detection_analysis.load_tracking_data(path_YOLO_out_json)
+    frame_ids, track_ids, x_coords, y_coords, _, heights = detection_analysis.load_tracking_data(path_YOLO_out_json)
     
     # Open video
     cap = cv2.VideoCapture(path_YOLO_out_vid)
 
-    # Create plotter object
-    plotter = VideoPlotterTracks(frame_ids, track_ids, x_coords, y_coords, path_YOLO_out_vid)
+    # Create plotter object for initial visualization
+    plotter = plotting_tools.VideoPlotterTracks(frame_ids, track_ids, x_coords, y_coords, path_YOLO_out_vid)
     plotter.show()
 
-    # %% Data preparation
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import detection_analysis
-    import preprocessing
-
+    # %% PREPROCESSING AND CHANGEOVER DETECTION
     frame_ids_orig, track_ids_orig, x_coords_orig, y_coords_orig = frame_ids, track_ids, x_coords, y_coords
 
-    # Merge tracks
-    _, track_ids_merged, _, _ = preprocessing.merge_tracks(frame_ids, track_ids, x_coords, y_coords)
-
-    frame_ids, track_ids, x_coords, y_coords = preprocessing.remove_outliers_first_sample(frame_ids, track_ids, x_coords, y_coords, debug=True)
-
-    # Fill discontinuities
+    # Preprocess the data
+    _, track_ids, _, _ = preprocessing.merge_tracks(frame_ids, track_ids, x_coords, y_coords, debug=False)
+    frame_ids, track_ids, x_coords, y_coords = preprocessing.remove_outliers_first_sample(frame_ids, track_ids, x_coords, y_coords, debug=False)
     frame_ids, track_ids, x_coords, y_coords = preprocessing.fill_discontinuities(frame_ids, track_ids, x_coords, y_coords)
-
-    # Plot data
     preprocessing.plot_data(frame_ids, track_ids, x_coords, y_coords)
 
-    y_dist_min, unique_frame_ids = detection_analysis.compute_pairwise_distance(frame_ids, y_coords)
-
-    # y_dist_min_clean, mask_filt, removed = detection_analysis.remove_outliers(y_dist_min, 25, 1.25, 20, debug=True)
-    y_dist_min_clean_filt = detection_analysis.zero_phase_filter(y_dist_min, wn=0.1, order=4)
+    # Changeover detection
+    y_dist_min, frame_ids_unique = detection_analysis.compute_pairwise_distance(frame_ids, y_coords)
+    y_dist_min_clean_filt = detection_analysis.zero_phase_filter(y_dist_min, wn=0.1, order=4) # THIS SHOULD ALL BE COMBINED INSIDE DETECT_CHANGEOVERS()!
     changeovers = detection_analysis.detect_changeovers(y_dist_min_clean_filt)
 
-    y_coords_orig = y_coords.copy()
-    frame_ids_orig = frame_ids.copy()
+    changeovers = plot_tune_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers)
 
-    # %% Plot changeover detection
-    changeovers = plot_changeover_detection(path_YOLO_out_vid, frame_ids, track_ids, x_coords, y_coords, changeovers)
+    # %% (DEVELOPMENT) NORMALIZE RIDER MOVEMENT
+    detection_analysis.normalize_rider_movement(y_dist_min_clean_filt, frame_ids_unique, heights, frame_ids_orig, debug=True) # Original frame_ids bc heights is not yet modified (no input to track merging)
 
-    # %% After closing and updating the changeover detection, save the new changeovers
+    # Plot the average bounding box height per frame
+    fig = plt.figure(figsize=(12, 6))
+    fig.suptitle('BBox Height')
+
+    gs = fig.add_gridspec(3, 2)
+
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
+    ax3 = fig.add_subplot(gs[2, 0], sharex=ax1)
+    ax4 = fig.add_subplot(gs[0:-2, 1], sharex=ax1)
+    ax5 = fig.add_subplot(gs[-2:, 1])
+
+    ax1.plot(frame_ids, x_coords, marker='.', linestyle='')
+    ax2.plot(frame_ids, y_coords, marker='.', linestyle='')
+    ax3.plot(frame_ids_unique, y_dist_min_clean_filt, marker='.', linestyle='')
+    ax4.plot(frame_ids_orig, heights, marker='.', linestyle='') # Plot original frame IDs because height has not been modified
+    
+    plotting_tools.plot_track_numbers(frame_ids, track_ids, x_coords, ax1)
+    plotting_tools.plot_track_numbers(frame_ids, track_ids, y_coords, ax2)
+
+    ax1.set_ylabel('X Coordinate')
+    ax2.set_ylabel('Y Coordinate')
+    ax3.set_ylabel('Distance')
+    ax4.set_ylabel('Height')
+    ax3.set_xlabel('Frame ID')
+
+    plt.legend()
+    plt.grid(True)
+
+    plotter = plotting_tools.VideoPlotterGeneric(fig, [ax1, ax2, ax3, ax4], ax5, video_path=path_YOLO_out_vid, x_type='frame')
+    plotter.show()
+
+    # %% RESTRUCTURE CHANGEOVERS TO INCLUDE ALL DATA AND SAVE RESULTS
     if not cap:
         cap = cv2.VideoCapture(path_YOLO_out_vid)
 
@@ -366,7 +401,7 @@ if __name__ == '__main__':
     json_name_changeovers = vid_name_with_ext.replace('.mp4', f'_changeovers_{now_string}.json')
     json_path_changeovers = os.path.join('output/changeovers', json_name_changeovers)
 
-    if input(f"Save results to {json_path_changeovers}? (y/n) ").lower() == 'y':
+    if input(f"Save results to {json_path_changeovers}? (y/n, default: n) ").lower() == 'y':
         with open(json_path_changeovers, 'w') as f:
             json.dump(changeovers_out, f, indent=4)
 
@@ -375,8 +410,6 @@ if __name__ == '__main__':
         print("Changeover timings not saved.")
 
     # %% Extract changeover videos
-    from extract_changeover_clips import extract_changeover_clips
-
     # Ask user to export changeover clips
     if input("Extract changeover clips? (y/n, default: n) ").lower() == 'y':
         if not os.path.exists(json_path_changeovers):

@@ -43,7 +43,8 @@ def remove_nan_tracks(frame_ids, track_ids, x_coords, y_coords):
 
 def compute_stdevs(frame_ids, x_coords, y_coords):
     """Computes the standard deviation of x and y coordinates for each frame.
-    Output is an array of stdevs for each frame."""
+    Output is an array of stdevs for each frame.
+    Used to determine whether tracks are distinguishable within a frame."""
 
     stdevs_x = []
     stdevs_y = []
@@ -107,15 +108,21 @@ def get_first_track_indices(frame_ids, track_ids):
     return first_indices, first_frames
 
 def merge_tracks(frame_ids, track_ids, x_coords, y_coords, debug=False):
-    from detection_analysis import zero_phase_filter
-
     """Merge tracks that are close to each other.
     First assesses whether tracks are distinguishable within a frame by checking the standard deviation of the values in a frame (window).
     If this exceeds a threshold, tracks are distuinguishable and we can attempt to merge consecutive tracks.
     
     Merging happens by computing a polyfit through the last x,y coordinates of the track and comparing the distance to the next appearing tracks.
     The distance must be lower than a threshold to merge the tracks.
+
+    'Merging' means setting the track ID of the next appearing track equal to the current track ID. 
+
+    Tracks do not have to be in consecutive frames, but the distance between the last frame of the current track and the first frame of the next track must be within a threshold.
+
+    Returns arrays of same length as the input arrays, but with merged tracks IDs.
     """
+
+    from detection_analysis import zero_phase_filter
 
     # TO-DO: These constants should be given as input parameters!
     POLYFIT_LEN = 10 # Length of the polyfit on last x,y coordinates of the track
@@ -375,6 +382,7 @@ def detect_discontinuities(frame_ids, threshold=1):
 
 def fill_discontinuities(frame_ids, track_ids, x_coords, y_coords, debug=False):
     """Fill the discontinuities in the frame_ids array by linear interpolation between the start and end points of the discontinuities.
+    Improves the changeover detection by improving the repeatability of the rider distance pattern, which is the basis of the changeover detection.
     
     Args:
     frame_ids (np.array): Array of frame IDs.

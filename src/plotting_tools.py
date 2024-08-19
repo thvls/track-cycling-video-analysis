@@ -181,7 +181,10 @@ class VideoPlotterGeneric:
         - Define translation function from data x-axis to video frame index.
     """
     def __init__(self, fig, axs_data, ax_video, video_path, x_type = 'frame'):
-        self.video_path = video_path
+        if video_path is None:
+            video_path = input('Enter the path to the video file: ')
+        else:
+            self.video_path = video_path
         self.cap = cv2.VideoCapture(video_path)
         self.frame_count = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
